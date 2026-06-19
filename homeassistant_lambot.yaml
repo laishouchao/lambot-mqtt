@@ -1,0 +1,269 @@
+# =============================================
+# LAMBOT 扫地机 Home Assistant MQTT 集成配置
+# =============================================
+# 
+# 使用方法:
+# 1. 确保Home Assistant已安装MQTT集成（Mosquitto Broker）
+# 2. 在LAMBOT设备上配置MQTT桥接到Home Assistant的Mosquitto
+#    或者直接让HA连接到设备的MQTT Broker (192.168.1.xx:19883)
+# 3. 将此配置添加到你的configuration.yaml中
+# 4. 重启Home Assistant
+#
+# 设备信息:
+#   MQTT Broker: 192.168.1.xx:19883
+#   Username: Lambot
+#   Password: lambot123
+#   Device UUID: f5daee6e-b7ea-06a9-e10f-000000000000
+#   固件: 3.0.0_1872_dev-sdp_vre-20220425
+#   MAC: D8:C0:A6:33:13:8F
+#
+# MQTT主题:
+#   发布(命令): device/Device UUID/robot
+#   订阅(状态): device/Device UUID/app
+#
+# =============================================
+
+# --- 方案1: 使用MQTT传感器和开关（推荐） ---
+
+# MQTT配置 - 需要在configuration.yaml中添加MQTT broker配置
+# 如果使用Mosquitto add-on，需要配置MQTT bridge将设备broker桥接过来
+# 或者使用mqtt_client配置直接连接设备broker
+
+# 传感器: 电池电量
+mqtt:
+  sensor:
+    - name: "LAMBOT 电池电量"
+      unique_id: "lambot_battery"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 3 %}
+          {{ value_json.p }}
+        {% endif %}
+      unit_of_measurement: "%"
+      device_class: battery
+      icon: mdi:battery
+
+    - name: "LAMBOT 设备状态"
+      unique_id: "lambot_state"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 22 %}
+          {% set states = {
+            0: '空闲', 1: '充电中', 2: '电池已满', 4: '回充中',
+            6: '清扫中', 7: '清扫暂停', 11: '定点清扫',
+            14: '区域清扫', 18: '智能清扫', 20: '自动探索', 22: '沿边清扫'
+          } %}
+          {{ states.get(value_json.p, '未知') }}
+        {% endif %}
+      icon: mdi:robot-vacuum
+
+    - name: "LAMBOT 充电状态"
+      unique_id: "lambot_charging"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 4 %}
+          {{ '充电中' if value_json.p else '未充电' }}
+        {% endif %}
+      device_class: battery_charging
+      icon: mdi:battery-charging
+
+    - name: "LAMBOT 主板温度"
+      unique_id: "lambot_temperature"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 6 %}
+          {{ value_json.p }}
+        {% endif %}
+      unit_of_measurement: "°C"
+      device_class: temperature
+      icon: mdi:thermometer
+
+    - name: "LAMBOT 清扫面积"
+      unique_id: "lambot_sweep_area"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 20 %}
+          {{ value_json.p }}
+        {% endif %}
+      unit_of_measurement: "m²"
+      icon: mdi:floor-plan
+
+    - name: "LAMBOT 吸力模式"
+      unique_id: "lambot_fan_mode"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 25 %}
+          {% set modes = {0: '标准', 1: '静音', 2: '强力', 3: '最大'} %}
+          {{ modes.get(value_json.p, '未知') }}
+        {% endif %}
+      icon: mdi:fan
+
+    - name: "LAMBOT 网络信息"
+      unique_id: "lambot_network"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 24 %}
+          {{ value_json.p.ssid }} ({{ value_json.p.ip }})
+        {% endif %}
+      icon: mdi:wifi
+
+    - name: "LAMBOT 固件版本"
+      unique_id: "lambot_firmware"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 14 %}
+          {{ value_json.p.v }}
+        {% endif %}
+      icon: mdi:chip
+
+  # 按钮: 控制命令
+  button:
+    - name: "LAMBOT 开始清扫"
+      unique_id: "lambot_start_sweep"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":26}'
+      icon: mdi:play
+
+    - name: "LAMBOT 停止"
+      unique_id: "lambot_stop"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":24}'
+      icon: mdi:stop
+
+    - name: "LAMBOT 回充电桩"
+      unique_id: "lambot_go_home"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":25}'
+      icon: mdi:home
+
+    - name: "LAMBOT 查找机器人"
+      unique_id: "lambot_find_me"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":56}'
+      icon: mdi:bell-ring
+
+    - name: "LAMBOT 定点清扫"
+      unique_id: "lambot_spot_clean"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":27}'
+      icon: mdi:bullseye
+
+    - name: "LAMBOT 沿边清扫"
+      unique_id: "lambot_edge_sweep"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":109}'
+      icon: mdi:border-all
+
+    - name: "LAMBOT 自动探索"
+      unique_id: "lambot_explore"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":108}'
+      icon: mdi:compass
+
+    - name: "LAMBOT 请求状态更新"
+      unique_id: "lambot_update"
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      payload_press: '{"f":40}'
+      icon: mdi:refresh
+
+  # 选择器: 吸力模式
+  select:
+    - name: "LAMBOT 吸力模式"
+      unique_id: "lambot_fan_mode_select"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 25 %}
+          {{ ['标准', '静音', '强力', '最大'][value_json.p] if value_json.p < 4 else '未知' }}
+        {% endif %}
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      command_template: >
+        {% set modes = {'标准': 0, '静音': 1, '强力': 2, '最大': 3} %}
+        {"f":59,"p":{{ modes.get(value, 0) }}}
+      options:
+        - "标准"
+        - "静音"
+        - "强力"
+        - "最大"
+      icon: mdi:fan
+
+    - name: "LAMBOT 拖地模式"
+      unique_id: "lambot_mop_mode_select"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: >
+        {% if value_json.f == 32 %}
+          {{ ['无', '慢速', '标准', '快速', '最大'][value_json.p] if value_json.p < 5 else '未知' }}
+        {% endif %}
+      command_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/robot"
+      command_template: >
+        {% set modes = {'无': 0, '慢速': 1, '标准': 2, '快速': 3, '最大': 4} %}
+        {"f":101,"p":{{ modes.get(value, 0) }}}
+      options:
+        - "无"
+        - "慢速"
+        - "标准"
+        - "快速"
+        - "最大"
+      icon: mdi:mop
+
+  # 二进制传感器: 设备在线状态
+  binary_sensor:
+    - name: "LAMBOT 在线"
+      unique_id: "lambot_online"
+      state_topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+      value_template: "{{ 'ON' }}"
+      payload_on: "ON"
+      payload_off: "OFF"
+      device_class: connectivity
+      off_delay: 30  # 30秒无消息则判定离线
+      icon: mdi:robot-vacuum
+
+# =============================================
+# MQTT Bridge 配置 (Mosquitto)
+# =============================================
+# 如果你使用Mosquitto add-on，需要在Mosquitto配置中添加bridge:
+#
+# 在 /share/mosquitto/lambot_bridge.conf 中添加:
+#
+# connection lambot_device
+# address 192.168.1.28:19883
+# remote_username Lambot
+# remote_password lambot123
+# topic device/f5daee6e-b7ea-06a9-e10f-000000000000/# both
+# cleansession true
+# notifications false
+#
+# 然后在Mosquitto配置中 include此文件
+# =============================================
+
+# =============================================
+# 自动化示例
+# =============================================
+# automation:
+#   - alias: "清扫完成通知"
+#     trigger:
+#       - platform: mqtt
+#         topic: "device/f5daee6e-b7ea-06a9-e10f-000000000000/app"
+#         payload: '{"f":22,"p":0}'
+#         value_template: "{{ value_json.f == 22 and value_json.p == 0 }}"
+#     action:
+#       - service: notify.notify
+#         data:
+#           message: "LAMBOT扫地机已完成清扫，当前状态：空闲"
+#
+#   - alias: "电量低自动回充"
+#     trigger:
+#       - platform: numeric_state
+#         entity_id: sensor.lambot_battery
+#         below: 20
+#     condition:
+#       - condition: state
+#         entity_id: sensor.lambot_device_state
+#         state: "清扫中"
+#     action:
+#       - service: button.press
+#         target:
+#           entity_id: button.lambot_go_home
+#       - service: notify.notify
+#         data:
+#           message: "LAMBOT扫地机电量低于20%，已自动返回充电桩"
+# =============================================
